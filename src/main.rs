@@ -5,6 +5,7 @@ use rand::prelude::random;
 
 // Constants
 const SNAKE_HEAD_COLOR: Color = Color::rgb(0.7, 0.7, 0.7);
+const SNAKE_SEGMENT_COLOR: Color = Color::rgb(0.3, 0.3, 0.3);
 const FOOD_COLOR: Color = Color::rgb(1.0, 0.0, 1.0);
 
 const ARENA_WIDTH: u32 = 10;
@@ -13,6 +14,9 @@ const ARENA_HEIGHT: u32 = 10;
 // Components
 #[derive(Component)]
 struct SnakeHead;
+
+#[derive(Component)]
+struct SnakeSegment;
 
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
 struct Position {
@@ -62,19 +66,39 @@ fn setup_camera(mut commands: Commands) {
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
 }
 
-fn spawn_snake(mut commands: Commands) {
+fn spawn_snake(mut commands: Commands, mut segments: ResMut<SnakeSegments>) {
+    *segments = SnakeSegments(vec![
+        commands
+            .spawn_bundle(SpriteBundle {
+                sprite: Sprite {
+                    color: SNAKE_HEAD_COLOR,
+                    ..default()
+                },
+                ..default()
+            })
+            .insert(SnakeHead)
+            .insert(SnakeSegment)
+            .insert(Position { x: 3, y: 3 })
+            .insert(Size::square(0.8))
+            .insert(Direction::Up)
+            .id(),
+        spawn_segment(commands, Position { x: 3, y: 2 }),
+    ]);
+}
+
+fn spawn_segment(mut commands: Commands, position: Position) -> Entity {
     commands
         .spawn_bundle(SpriteBundle {
             sprite: Sprite {
-                color: SNAKE_HEAD_COLOR,
+                color: SNAKE_SEGMENT_COLOR,
                 ..default()
             },
             ..default()
         })
         .insert(SnakeHead)
-        .insert(Position { x: 3, y: 3 })
-        .insert(Size::square(0.8))
-        .insert(Direction::Up);
+        .insert(position)
+        .insert(Size::square(0.65))
+        .id()
 }
 
 fn snake_movement(mut q: Query<(&mut Position, &Direction), With<SnakeHead>>) {
@@ -166,6 +190,10 @@ fn food_spawner(mut commands: Commands) {
         .insert(Size::square(0.8));
 }
 
+// Resources
+#[derive(Default)]
+struct SnakeSegments(Vec<Entity>);
+
 fn main() {
     App::new()
         .insert_resource(WindowDescriptor {
@@ -175,6 +203,7 @@ fn main() {
             ..default()
         })
         .insert_resource(ClearColor(Color::rgb(0.04, 0.04, 0.04)))
+        .insert_resource(SnakeSegments::default())
         .add_startup_system(setup_camera)
         .add_startup_system(spawn_snake)
         .add_system_set(
