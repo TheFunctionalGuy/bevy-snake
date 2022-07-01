@@ -12,9 +12,7 @@ const ARENA_HEIGHT: u32 = 10;
 
 // Components
 #[derive(Component)]
-struct SnakeHead {
-    direction: Direction,
-}
+struct SnakeHead;
 
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
 struct Position {
@@ -59,8 +57,6 @@ impl Direction {
 #[derive(Component)]
 struct Food;
 
-// Entities
-
 // Systems
 fn setup_camera(mut commands: Commands) {
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
@@ -75,17 +71,16 @@ fn spawn_snake(mut commands: Commands) {
             },
             ..default()
         })
-        .insert(SnakeHead {
-            direction: Direction::Up,
-        })
+        .insert(SnakeHead)
         .insert(Position { x: 3, y: 3 })
-        .insert(Size::square(0.8));
+        .insert(Size::square(0.8))
+        .insert(Direction::Up);
 }
 
-fn snake_movement(mut q: Query<(&mut Position, &SnakeHead)>) {
-    let (mut head_pos, head) = q.single_mut();
+fn snake_movement(mut q: Query<(&mut Position, &Direction), With<SnakeHead>>) {
+    let (mut head_pos, head_direction) = q.single_mut();
 
-    match &head.direction {
+    match head_direction {
         Direction::Left => {
             head_pos.x -= 1;
         }
@@ -101,7 +96,10 @@ fn snake_movement(mut q: Query<(&mut Position, &SnakeHead)>) {
     };
 }
 
-fn snake_movement_input(keyboard_input: Res<Input<KeyCode>>, mut q: Query<&mut SnakeHead>) {
+fn snake_movement_input(
+    keyboard_input: Res<Input<KeyCode>>,
+    mut q: Query<&mut Direction, With<SnakeHead>>,
+) {
     let dir: Direction = if keyboard_input.pressed(KeyCode::Left) {
         Direction::Left
     } else if keyboard_input.pressed(KeyCode::Right) {
@@ -114,10 +112,10 @@ fn snake_movement_input(keyboard_input: Res<Input<KeyCode>>, mut q: Query<&mut S
         return;
     };
 
-    let mut head = q.single_mut();
+    let mut head_direction = q.single_mut();
 
-    if dir != head.direction.opposite() {
-        head.direction = dir;
+    if dir != head_direction.opposite() {
+        *head_direction = dir;
     }
 }
 
