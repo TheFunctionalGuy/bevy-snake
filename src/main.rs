@@ -1,3 +1,4 @@
+/// I like CREQ
 use bevy::prelude::*;
 
 use bevy::core::FixedTimestep;
@@ -11,6 +12,13 @@ const FOOD_COLOR: Color = Color::rgb(1.0, 0.0, 1.0);
 const ARENA_WIDTH: u32 = 10;
 const ARENA_HEIGHT: u32 = 10;
 
+// Resources
+#[derive(Default, Deref, DerefMut)]
+struct SnakeSegments(Vec<Entity>);
+
+#[derive(Deref, DerefMut)]
+struct LastDirection(Direction);
+
 // Components
 #[derive(Component)]
 struct SnakeHead;
@@ -18,7 +26,7 @@ struct SnakeHead;
 #[derive(Component)]
 struct SnakeSegment;
 
-#[derive(Component, Clone, Copy, PartialEq, Eq)]
+#[derive(Component, Clone, Copy, PartialEq, Eq, Debug)]
 struct Position {
     x: i32,
     y: i32,
@@ -95,33 +103,55 @@ fn spawn_segment(mut commands: Commands, position: Position) -> Entity {
             },
             ..default()
         })
-        .insert(SnakeHead)
+        .insert(SnakeSegment)
         .insert(position)
         .insert(Size::square(0.65))
         .id()
 }
 
-fn snake_movement(mut q: Query<(&mut Position, &Direction), With<SnakeHead>>) {
-    let (mut head_pos, head_direction) = q.single_mut();
+fn snake_movement(
+    mut last_direction: ResMut<LastDirection>,
+    mut head: Query<(Entity, &Direction)>,
+    mut positions: Query<&mut Position, With<SnakeSegment>>,
+) {
+    let old_positions: Vec<Position> = positions.iter().copied().collect();
+
+    // Move head
+    let (head_entity, head_direction) = head.single_mut();
+    let mut head_pos = positions.get_mut(head_entity).unwrap();
 
     match head_direction {
         Direction::Left => {
             head_pos.x -= 1;
+            **last_direction = Direction::Left;
         }
         Direction::Up => {
             head_pos.y += 1;
+            **last_direction = Direction::Up;
         }
         Direction::Right => {
             head_pos.x += 1;
+            **last_direction = Direction::Right;
         }
         Direction::Down => {
             head_pos.y -= 1;
+            **last_direction = Direction::Down;
         }
     };
+
+    // Move rest of segments
+    positions
+        .iter_mut()
+        .skip(1)
+        .zip(old_positions.iter())
+        .for_each(|(mut pos, old_pos)| {
+            *pos = *old_pos;
+        });
 }
 
 fn snake_movement_input(
     keyboard_input: Res<Input<KeyCode>>,
+    last_direction: Res<LastDirection>,
     mut q: Query<&mut Direction, With<SnakeHead>>,
 ) {
     let dir: Direction = if keyboard_input.pressed(KeyCode::Left) {
@@ -138,7 +168,7 @@ fn snake_movement_input(
 
     let mut head_direction = q.single_mut();
 
-    if dir != head_direction.opposite() {
+    if dir != last_direction.opposite() {
         *head_direction = dir;
     }
 }
@@ -190,10 +220,6 @@ fn food_spawner(mut commands: Commands) {
         .insert(Size::square(0.8));
 }
 
-// Resources
-#[derive(Default)]
-struct SnakeSegments(Vec<Entity>);
-
 fn main() {
     App::new()
         .insert_resource(WindowDescriptor {
@@ -204,6 +230,7 @@ fn main() {
         })
         .insert_resource(ClearColor(Color::rgb(0.04, 0.04, 0.04)))
         .insert_resource(SnakeSegments::default())
+        .insert_resource(LastDirection(Direction::Up))
         .add_startup_system(setup_camera)
         .add_startup_system(spawn_snake)
         .add_system_set(
