@@ -173,8 +173,6 @@ fn snake_movement(
 
     // Update last tail position
     *last_tail_position = LastTailPosition(Some(*positions.iter().last().unwrap()));
-
-    println!("Last tail position: {:?}", *last_tail_position)
 }
 
 fn snake_movement_input(
