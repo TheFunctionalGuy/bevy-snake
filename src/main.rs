@@ -19,6 +19,12 @@ struct SnakeSegments(Vec<Entity>);
 #[derive(Deref, DerefMut)]
 struct LastDirection(Direction);
 
+#[derive(Default, Debug)]
+struct LastTailPosition(Option<Position>);
+
+// Events
+struct GrowthEvent;
+
 // Components
 #[derive(Component)]
 struct SnakeHead;
@@ -111,6 +117,7 @@ fn spawn_segment(mut commands: Commands, position: Position) -> Entity {
 
 fn snake_movement(
     mut last_direction: ResMut<LastDirection>,
+    mut last_tail_position: ResMut<LastTailPosition>,
     mut head: Query<(Entity, &Direction)>,
     mut positions: Query<&mut Position, With<SnakeSegment>>,
 ) {
@@ -147,6 +154,11 @@ fn snake_movement(
         .for_each(|(mut pos, old_pos)| {
             *pos = *old_pos;
         });
+
+    // Update last tail position
+    *last_tail_position = LastTailPosition(Some(*positions.iter().last().unwrap()));
+
+    println!("Last tail position: {:?}", *last_tail_position)
 }
 
 fn snake_movement_input(
@@ -170,6 +182,33 @@ fn snake_movement_input(
 
     if dir != last_direction.opposite() {
         *head_direction = dir;
+    }
+}
+
+fn snake_eating(
+    mut commands: Commands,
+    mut growth_writer: EventWriter<GrowthEvent>,
+    food_positions: Query<(Entity, &Position), With<Food>>,
+    head_position: Query<&Position, With<SnakeHead>>,
+) {
+    let head_pos = head_position.single();
+
+    for (ent, food_pos) in food_positions.iter() {
+        if food_pos == head_pos {
+            commands.entity(ent).despawn();
+            growth_writer.send(GrowthEvent);
+        }
+    }
+}
+
+fn snake_growth(
+    commands: Commands,
+    last_tail_position: Res<LastTailPosition>,
+    mut segments: ResMut<SnakeSegments>,
+    mut growth_reader: EventReader<GrowthEvent>,
+) {
+    if growth_reader.iter().next().is_some() {
+        segments.push(spawn_segment(commands, last_tail_position.0.unwrap()));
     }
 }
 
@@ -222,6 +261,7 @@ fn food_spawner(mut commands: Commands) {
 
 fn main() {
     App::new()
+        // Resources
         .insert_resource(WindowDescriptor {
             title: "Snake!".to_string(),
             width: 500.0,
@@ -231,14 +271,19 @@ fn main() {
         .insert_resource(ClearColor(Color::rgb(0.04, 0.04, 0.04)))
         .insert_resource(SnakeSegments::default())
         .insert_resource(LastDirection(Direction::Up))
+        .insert_resource(LastTailPosition::default())
+        // Startup Systems
         .add_startup_system(setup_camera)
         .add_startup_system(spawn_snake)
+        // Systems
+        .add_system(snake_movement_input.before(snake_movement))
         .add_system_set(
             SystemSet::new()
                 .with_run_criteria(FixedTimestep::step(0.5))
-                .with_system(snake_movement),
+                .with_system(snake_movement)
+                .with_system(snake_eating.after(snake_movement))
+                .with_system(snake_growth.after(snake_eating)),
         )
-        .add_system(snake_movement_input.before(snake_movement))
         .add_system_set(
             SystemSet::new()
                 .with_run_criteria(FixedTimestep::step(1.0))
@@ -250,6 +295,9 @@ fn main() {
                 .with_system(position_translation)
                 .with_system(size_scaling),
         )
+        // Events
+        .add_event::<GrowthEvent>()
+        // Plugins
         .add_plugins(DefaultPlugins)
         .run();
 }
