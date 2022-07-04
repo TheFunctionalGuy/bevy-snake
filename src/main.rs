@@ -25,6 +25,8 @@ struct LastTailPosition(Option<Position>);
 // Events
 struct GrowthEvent;
 
+struct GameOverEvent;
+
 // Components
 #[derive(Component)]
 struct SnakeHead;
@@ -118,6 +120,7 @@ fn spawn_segment(mut commands: Commands, position: Position) -> Entity {
 fn snake_movement(
     mut last_direction: ResMut<LastDirection>,
     mut last_tail_position: ResMut<LastTailPosition>,
+    mut game_over_writer: EventWriter<GameOverEvent>,
     mut head: Query<(Entity, &Direction)>,
     mut positions: Query<&mut Position, With<SnakeSegment>>,
 ) {
@@ -145,6 +148,19 @@ fn snake_movement(
             **last_direction = Direction::Down;
         }
     };
+
+    if head_pos.x < 0
+        || head_pos.y < 0
+        || head_pos.x as u32 >= ARENA_WIDTH
+        || head_pos.y as u32 >= ARENA_HEIGHT
+    {
+        game_over_writer.send(GameOverEvent);
+    }
+
+    // TODO: Still kinda buggy if directly following the snake
+    if old_positions.contains(&head_pos) {
+        game_over_writer.send(GameOverEvent);
+    }
 
     // Move rest of segments
     positions
@@ -259,6 +275,21 @@ fn food_spawner(mut commands: Commands) {
         .insert(Size::square(0.8));
 }
 
+fn game_over(
+    mut commands: Commands,
+    mut reader: EventReader<GameOverEvent>,
+    segments_res: ResMut<SnakeSegments>,
+    food: Query<Entity, With<Food>>,
+    segments: Query<Entity, With<SnakeSegment>>,
+) {
+    if reader.iter().next().is_some() {
+        for ent in food.iter().chain(segments.iter()) {
+            commands.entity(ent).despawn();
+        }
+        spawn_snake(commands, segments_res);
+    }
+}
+
 fn main() {
     App::new()
         // Resources
@@ -284,6 +315,7 @@ fn main() {
                 .with_system(snake_eating.after(snake_movement))
                 .with_system(snake_growth.after(snake_eating)),
         )
+        .add_system(game_over.after(snake_movement))
         .add_system_set(
             SystemSet::new()
                 .with_run_criteria(FixedTimestep::step(1.0))
@@ -297,6 +329,7 @@ fn main() {
         )
         // Events
         .add_event::<GrowthEvent>()
+        .add_event::<GameOverEvent>()
         // Plugins
         .add_plugins(DefaultPlugins)
         .run();
