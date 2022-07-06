@@ -1,9 +1,9 @@
 /// I like CREQ
 use std::collections::HashSet;
 
-use bevy::prelude::*;
-
 use bevy::core::FixedTimestep;
+use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
+use bevy::prelude::*;
 use rand::seq::IteratorRandom;
 
 // Constants
@@ -364,5 +364,7 @@ fn main() {
         .add_event::<GameOverEvent>()
         // Plugins
         .add_plugins(DefaultPlugins)
+        .add_plugin(LogDiagnosticsPlugin::default())
+        .add_plugin(FrameTimeDiagnosticsPlugin::default())
         .run();
 }
