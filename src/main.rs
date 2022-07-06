@@ -165,16 +165,13 @@ fn snake_movement(
         }
     };
 
+    let updated_head_pos = *head_pos;
+
     if head_pos.x < 0
         || head_pos.y < 0
         || head_pos.x as u32 >= ARENA_WIDTH
         || head_pos.y as u32 >= ARENA_HEIGHT
     {
-        game_over_writer.send(GameOverEvent);
-    }
-
-    // TODO: Still kinda buggy if directly following the snake
-    if old_positions.contains(&head_pos) {
         game_over_writer.send(GameOverEvent);
     }
 
@@ -185,6 +182,11 @@ fn snake_movement(
         .zip(old_positions.iter())
         .for_each(|(mut pos, old_pos)| {
             *pos = *old_pos;
+
+            // Check if head touches any updated segment
+            if *pos == updated_head_pos {
+                game_over_writer.send(GameOverEvent);
+            }
         });
 
     // Update last tail position
