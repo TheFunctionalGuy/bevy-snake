@@ -1,8 +1,10 @@
 /// I like CREQ
+use std::collections::HashSet;
+
 use bevy::prelude::*;
 
 use bevy::core::FixedTimestep;
-use rand::prelude::random;
+use rand::seq::IteratorRandom;
 
 // Constants
 const SNAKE_HEAD_COLOR: Color = Color::rgb(0.7, 0.7, 0.7);
@@ -19,8 +21,11 @@ struct SnakeSegments(Vec<Entity>);
 #[derive(Deref, DerefMut)]
 struct LastDirection(Direction);
 
-#[derive(Default, Debug)]
+#[derive(Default)]
 struct LastTailPosition(Option<Position>);
+
+#[derive(Default, Deref, DerefMut)]
+struct FreePositionsTemplate(HashSet<Position>);
 
 // Events
 struct GrowthEvent;
@@ -34,7 +39,7 @@ struct SnakeHead;
 #[derive(Component)]
 struct SnakeSegment;
 
-#[derive(Component, Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Component, Clone, Copy, PartialEq, Eq, Hash)]
 struct Position {
     x: i32,
     y: i32,
@@ -80,6 +85,17 @@ struct Food;
 // Systems
 fn setup_camera(mut commands: Commands) {
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
+}
+
+fn setup_free_position_template(mut free_position_template: ResMut<FreePositionsTemplate>) {
+    for x in 0..ARENA_WIDTH {
+        for y in 0..ARENA_HEIGHT {
+            free_position_template.insert(Position {
+                x: x as i32,
+                y: y as i32,
+            });
+        }
+    }
 }
 
 fn spawn_snake(mut commands: Commands, mut segments: ResMut<SnakeSegments>) {
@@ -255,22 +271,34 @@ fn position_translation(windows: Res<Windows>, mut q: Query<(&Position, &mut Tra
     }
 }
 
-// TODO: What about stacking food? Need to handle that
-fn food_spawner(mut commands: Commands) {
-    commands
-        .spawn_bundle(SpriteBundle {
-            sprite: Sprite {
-                color: FOOD_COLOR,
+fn food_spawner(
+    mut commands: Commands,
+    free_position_template: Res<FreePositionsTemplate>,
+    q: Query<&Position>,
+) {
+    // Determine free fields
+    let mut free_fields: HashSet<Position> = free_position_template.clone();
+
+    for pos in q.iter() {
+        free_fields.remove(pos);
+    }
+
+    // Pick free field
+    let free_field = free_fields.iter().choose(&mut rand::thread_rng());
+
+    if let Some(free_field) = free_field {
+        commands
+            .spawn_bundle(SpriteBundle {
+                sprite: Sprite {
+                    color: FOOD_COLOR,
+                    ..default()
+                },
                 ..default()
-            },
-            ..default()
-        })
-        .insert(Food)
-        .insert(Position {
-            x: (random::<f32>() * ARENA_WIDTH as f32) as i32,
-            y: (random::<f32>() * ARENA_HEIGHT as f32) as i32,
-        })
-        .insert(Size::square(0.8));
+            })
+            .insert(Food)
+            .insert(*free_field)
+            .insert(Size::square(0.8));
+    }
 }
 
 fn game_over(
@@ -288,6 +316,8 @@ fn game_over(
     }
 }
 
+// TODO: Add win screen if snake is maximum length
+
 fn main() {
     App::new()
         // Resources
@@ -301,8 +331,10 @@ fn main() {
         .insert_resource(SnakeSegments::default())
         .insert_resource(LastDirection(Direction::Up))
         .insert_resource(LastTailPosition::default())
+        .insert_resource(FreePositionsTemplate::default())
         // Startup Systems
         .add_startup_system(setup_camera)
+        .add_startup_system(setup_free_position_template)
         .add_startup_system(spawn_snake)
         // Systems
         .add_system(snake_movement_input.before(snake_movement))
@@ -317,7 +349,7 @@ fn main() {
         .add_system_set(
             SystemSet::new()
                 .with_run_criteria(FixedTimestep::step(1.0))
-                .with_system(food_spawner),
+                .with_system(food_spawner.after(snake_eating)),
         )
         .add_system_set_to_stage(
             CoreStage::PostUpdate,
